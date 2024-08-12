@@ -4,6 +4,25 @@ import ApiResponse from "../utils/apiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
+// generating access and refresh token
+
+const generateAccessAndRefreshToken = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
+    // save refresh token to DB
+    user.refreshToken = refreshToken;
+    await user.save({ validateBeforeSave: false });
+    return { accessToken, refreshToken };
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "Something Went Wrong Wile Generating Refresh And Access Token"
+    );
+  }
+};
+
 const registerUser = asyncHandler(async (req, res) => {
   const { userName, fullName, email, password } = req.body;
   // validation
@@ -80,19 +99,45 @@ const loginUser = asyncHandler(async (req, res) => {
 5- access and refresh token
 6- send cookies
 */
+
+  const { userName, email, password } = req.body;
+  if (!email || !userName) {
+    throw new ApiError(400, "User Name Or Email Is Required");
+  }
+  const user = await User.findOne({ $or: [{ userName }, { email }] });
+  if (!user) {
+    throw new ApiError(404, "User Does Not Exist");
+  }
+
+  const isPasswordCorrect = await user.isPasswordCorrect(password);
+
+  if (!isPasswordCorrect) {
+    throw new ApiError(401, "Wrong Password");
+  }
+
+  const { accessToken, refreshToken } = await generateAccessAndRefreshToken(
+    user._id
+  );
+  const loggedUser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
+
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new ApiResponse(
+        200,
+        { user: loggedUser, accessToken, refreshToken },
+        "User Logged In Successfully"
+      )
+    );
 });
-const { userName, email, password } = req.body;
-if (!email || !userName) {
-  throw new ApiError(400, "User Name Or Email Is Required");
-}
-const user = await User.findOne({ $or: [{ userName }, { email }] });
-if (!user) {
-  throw new ApiError(404, "User Does Not Exist");
-}
 
-const isPasswordCorrect = await user.isPasswordCorrect(password);
-
-if (!isPasswordCorrect) {
-  throw new ApiError(401, "Wrong Password");
-}
 export { registerUser, loginUser };
