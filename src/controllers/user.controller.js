@@ -4,7 +4,7 @@ import ApiResponse from "../utils/apiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import jwt from "jsonwebtoken";
-
+import { v2 as cloudinary } from "cloudinary";
 // generating access and refresh token
 
 const generateAccessAndRefreshToken = async (userId) => {
@@ -266,6 +266,48 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, user, "Account Details Update Successfully"));
 });
+
+// updating user avatar
+
+const updateUserAvatar = asyncHandler(async (req, res) => {
+  const avatarLocalPath = req.file?.path;
+
+  if (!avatarLocalPath) {
+    throw new ApiError(400, "Avatar Is Missing");
+  }
+
+  // deleting old avatar image
+
+  // retrieving the current user avatar url
+  const user = await User.findById(req.user?._id);
+
+  if (user?.avatar) {
+    // extracting the public id from the current avatar url
+    const publicId = user.avatar.split("/").pop().split(".")[0];
+
+    // deleting the old image from the cloudinary
+
+    await cloudinary.uploader.destroy(publicId);
+  }
+
+  // uploading the new avatar to cloudinary
+
+  const avatar = await uploadOnCloudinary(avatarLocalPath);
+
+  if (!avatar.url) {
+    throw new ApiError(400, "Error While Updating The Avatar");
+  }
+
+  const updatedUser = await User.findByIdAndUpdate(
+    req.user?._id,
+    { $set: { avatar: avatar.url } },
+    { new: true }
+  ).select("-password");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, updatedUser, "Avatar Updated Successfully"));
+});
 export {
   registerUser,
   loginUser,
@@ -274,4 +316,5 @@ export {
   changeCurrentPassword,
   getCurrentUser,
   updateAccountDetails,
+  updateUserAvatar,
 };
