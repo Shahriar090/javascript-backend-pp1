@@ -5,7 +5,9 @@ import app from "./app.js";
 dotenv.config({
   path: "./.env",
 });
-
+app.get("/", (req, res) => {
+  res.send("App is running ");
+});
 connectDb()
   .then(() => {
     app.listen(process.env.PORT || 8000, () => {
